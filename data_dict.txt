@@ -1,0 +1,12 @@
+music_queue: {
+    svr_id:[
+        {
+            "title": title1,
+            "id": id1
+        }
+        ,{
+            "title": title2,
+            "id": id2
+        }
+    ]
+}
