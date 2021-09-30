@@ -371,7 +371,7 @@ class music_cog(commands.Cog):
             for i in range(self.SONGS_PER_PAGE):
                 title = self.music_queue[svr_id][i]["title"]
                 id = self.music_queue[svr_id][i]["id"]
-                val += "{0}.[**{1}**](https://www.youtube.com/watch?v={2})\n\n".format(i+1, title, id)
+                val += " {0}. [**{1}**](https://www.youtube.com/watch?v={2})\n\n".format(i+1, title, id)
 
             em.add_field(name=name, value = val, inline = False)
             msg = await ctx.send(embed = em)
