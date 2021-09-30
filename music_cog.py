@@ -31,7 +31,7 @@ class music_cog(commands.Cog):
     is_playing = {}
     vclient = {}
     queue_msg = {}
-    SONGS_PER_PAGE = 5
+    SONGS_PER_PAGE = 6
 
     #ffmpeg option for playing audio
     FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
@@ -481,13 +481,4 @@ class music_cog(commands.Cog):
         )
         self.reset(svr_id)
 
-    
-    @commands.command(name="test")
-    async def test(self, ctx, *args):
-        title = args[0]
-        title = args[1]
-        em = discord.Embed()
-        val = "[**{0}**](https://www.youtube.com/watch?v={1})\n".format(title, id)
-        print(len(val))
-        em.add_field(name="Currently playing", value=val, inline=False)
 
