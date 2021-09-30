@@ -61,7 +61,7 @@ def get_video_details(query):
             maxResults = 1,
             type = "video",
             q = query,
-            order = "viewCount"
+            order = "relevance"
             )
         response = request.execute()
         #package title and video id in a dictionary
