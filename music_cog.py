@@ -1,10 +1,14 @@
-from discord.embeds import Embed
-import random
-from youtubeapi import get_playlist_details, get_id, get_audio_url, get_video_details, get_video_details_id
-from time import time #for testing time performance
+#built in modules
+import random #used to shuffle playlist
+import asyncio #used to run async function in non-async function
+
+#external modules
 import discord
 from discord.ext import commands
-import asyncio
+
+#self defined modules
+from youtubeapi import get_playlist_details, get_id, get_audio_url, get_video_details, get_video_details_id #for searching and url finding purposes
+
 
 class music_cog(commands.Cog):
     def __init__(self, bot, pref):
@@ -23,33 +27,39 @@ class music_cog(commands.Cog):
         ]
 
 
-    #data structure to keep track of state of bot in individual servers
-    voice_channel = {}
-    text_channel = {}
-    current_song = {}
-    music_queue = {}
-    is_playing = {}
-    vclient = {}
-    queue_msg = {}
-    SONGS_PER_PAGE = 6
-
-    #ffmpeg option for playing audio
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+    #data structures to keep track of state of bot in individual servers
+    voice_channel = {} #keep track of the voice channel the bot needs to join when first called
+    text_channel = {} #keep track of the last text channel where a command is called
+    current_song = {} #keep track of the current song that the bot is playing
+    music_queue = {} #keep track of the music queue 
+    is_playing = {} #keep track of whether or not the bot is currently playing in a server
+    vclient = {} #keep track of the voice client being used in a server
+    queue_msg = {} #keep track of the queue message details when going to next or last page
+    
+    
+    SONGS_PER_PAGE = 6 #constant to keep track of the number of songs to display per page when queue is shown
+    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'} #ffmpeg option for playing audio
 
 #---------------------------------------------------------------------------
 #------------------------------general funcs--------------------------------
 #---------------------------------------------------------------------------
+    #deletes messages
     async def delete_message(self, channel, id):
         await channel.delete_messages([discord.Object(id=id)])
 
+
+    #used to go to next page or previous page when reaction is clicked on latest queue message
     async def flip_page(self, svr_id, direction):
-        #direction = 1 is go forward,
-        #direction = 0 is go backward
+
+        #initiate embed message to be sent
         em = discord.Embed()
+
+        #embed current song details to message
         title = self.current_song[svr_id]["title"]
         id = self.current_song[svr_id]["id"]
         em.add_field(name="Currently playing", value="[**{0}**](https://www.youtube.com/watch?v={1})\n".format(title, id), inline=False)
         
+        #add x number of songs under title "coming next" depending on self.SONGS_PER_PAGE
         name = "Coming up next:"
         val = ""
         queue_len = len(self.music_queue[svr_id])
@@ -57,34 +67,51 @@ class music_cog(commands.Cog):
         prev_last = self.queue_msg[svr_id]["prev_last"]
         print(prev_start)
         msg = self.queue_msg[svr_id]["msg"]
+
+        #for going to previous page
         if direction == 0:
-            if prev_start >= self.SONGS_PER_PAGE:
+
+            #when current page is 2nd to large page, go to previous page
+            if prev_start >= self.SONGS_PER_PAGE: 
+                #add x number of songs to empty string "val"
                 for i in range(prev_start-self.SONGS_PER_PAGE, prev_start):
                     title = self.music_queue[svr_id][i]["title"]
                     id = self.music_queue[svr_id][i]["id"]
                     val += " {0}. [**{1}**](https://www.youtube.com/watch?v={2})\n\n".format(i+1, title, id)
 
-                em.add_field(name=name, value = val, inline = False)
+                #embed the next songs in queue to message
+                em.add_field(name=name, value=val, inline=False)
+
+                #edit the latest queue message with updated message
                 await msg.edit(embed=em)
+
+                #to keep track of what page queue message is on
                 self.queue_msg[svr_id]['prev_last'] = prev_start
                 
-            elif prev_start == 0:
+            #when current page is 1st page, go to last page    
+            elif prev_start == 0: 
+                #decide the index of the 1st song to be shown on current page of queue
                 nb_of_songs_in_last = queue_len%self.SONGS_PER_PAGE
                 if nb_of_songs_in_last == 0:
                     start = queue_len - self.SONGS_PER_PAGE
                 else:    
                     start = queue_len - nb_of_songs_in_last
-
+                
+                #add x number of songs to empty string "val"
                 for i in range(start, queue_len):
                     title = self.music_queue[svr_id][i]["title"]
                     id = self.music_queue[svr_id][i]["id"]
                     val += " {0}. [**{1}**](https://www.youtube.com/watch?v={2})\n\n".format(i+1, title, id)
 
+                #embed the next songs in queue to message and edit previous queue message
                 em.add_field(name=name, value = val, inline = False)
                 await msg.edit(embed=em)
                 self.queue_msg[svr_id]['prev_last'] = start+self.SONGS_PER_PAGE
 
+        #for going to next page
         elif direction == 1:
+
+            #when current page is 1st page to 2nd last page
             if queue_len > prev_last+self.SONGS_PER_PAGE:
                 for i in range(prev_last, prev_last+self.SONGS_PER_PAGE):
                     title = self.music_queue[svr_id][i]["title"]
@@ -95,6 +122,7 @@ class music_cog(commands.Cog):
                 await msg.edit(embed=em)
                 self.queue_msg[svr_id]['prev_last'] = prev_last+self.SONGS_PER_PAGE
 
+            #when current page is last page
             elif prev_last >= queue_len:
                 start = 0
                 last = self.SONGS_PER_PAGE
@@ -107,6 +135,7 @@ class music_cog(commands.Cog):
                 await msg.edit(embed=em)
                 self.queue_msg[svr_id]['prev_last'] = self.SONGS_PER_PAGE
 
+            #not sure what this part is for, do further testing to check if it is needed
             else:
                 for i in range(prev_last, queue_len):
                     title = self.music_queue[svr_id][i]["title"]
@@ -118,32 +147,39 @@ class music_cog(commands.Cog):
                 self.queue_msg[svr_id]['prev_last'] = prev_last+self.SONGS_PER_PAGE
 
 
+    #reset state of bot to initial state
     def reset(self, svr_id):
-        self.text_channel[svr_id] = None
-        self.is_playing[svr_id] = False
-        self.current_song[svr_id] = None
-        self.music_queue[svr_id] = []
-        self.vclient[svr_id] = None
         self.voice_channel[svr_id] = None
+        self.text_channel[svr_id] = None
+        self.current_song[svr_id] = None
+        self.is_playing[svr_id] = False
+        self.vclient[svr_id] = None
+        self.music_queue[svr_id] = []
+        
+        
 
-
+    #send help message to text channel
     async def show_help(self, channel, ttl="Tune Bot Commands"):
         em = discord.Embed(title=ttl)
         for i in self.help_message:
             name = i["name"]
-            val = i["value"] + "\n\n\n\n"
-            
+            val = i["value"] + "\n\n"       
             em.add_field(name=name, value=val, inline=False)
+
         await channel.send(embed=em)
 
 
-
+    #play next song 
     def play_next(self, svr_id):
+
+        #if there are songs queued in music_queue
         if len(self.music_queue[svr_id]) > 0:
+
+            #set is_playing to true if it is false
             if self.is_playing[svr_id] == False:
                 self.is_playing[svr_id] = True
 
-            #get the first url
+            #try to get the audio url of the first song in music_queue 
             id = self.music_queue[svr_id][0]["id"]
             utube_url = "https://www.youtube.com/watch?v=" + id
             url_req = get_audio_url(utube_url)
@@ -152,15 +188,17 @@ class music_cog(commands.Cog):
             if url_req["success"] == True:
                 m_url = url_req["source"]
                 
-                #remove the first element as you are currently playing it
+                #remove the first element in music_queue
                 self.current_song[svr_id] = self.music_queue[svr_id][0]
                 self.music_queue[svr_id].pop(0)
 
+                #play the audio from url in discord voice client
                 self.vclient[svr_id].play(discord.FFmpegPCMAudio(m_url,**self.FFMPEG_OPTIONS), after=lambda e: self.play_next(svr_id=svr_id))
-                self.is_playing[svr_id] == True
-
+            
             #if getting the url is not successful
             elif url_req["success"] == False:
+                
+                #send message to discord channel saying that download has failed, playing next song
                 title = self.music_queue[svr_id][0]["title"]
                 coro = self.text_channel[svr_id].send('Could not download **{}**, playing next song!'.format(title))
                 fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
@@ -169,14 +207,19 @@ class music_cog(commands.Cog):
                 except:
                     print("An error happened sending the message")
 
+                #remove failed download song from music queue and play next song 
                 self.music_queue[svr_id].pop(0)
                 self.play_next(svr_id)
-                    
+
+        #if there are no songs in music queue
         else:
+
+            #set is_playing to false and current_song to None
             self.is_playing[svr_id] = False
             self.current_song[svr_id] = None
 
 
+    #
     async def play_music(self, svr_id):
         if len(self.music_queue[svr_id]) > 0:
             if self.is_playing[svr_id] == False:
@@ -219,12 +262,16 @@ class music_cog(commands.Cog):
         await self.show_help(ctx, ttl="Command error, these are the available commands:")
 
     
+    #executes on reaction add
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
+
+        #initiate svr details in data structures if not initiated yet 
         svr_id = reaction.message.guild.id
         if svr_id not in self.music_queue:
             self.reset(svr_id)
 
+        #handles what to do when previous or next page reaction is clicked on queue message
         if svr_id in self.queue_msg: 
             if reaction.message.id == self.queue_msg[svr_id]["msg"].id:
                 if user != self.bot.user:
@@ -236,12 +283,15 @@ class music_cog(commands.Cog):
                         await self.flip_page(svr_id, 1)
 
 #---------------------------------------------------------------------------
-#--------------------------------!commands----------------------------------
+#---------------------------------commands----------------------------------
 #---------------------------------------------------------------------------
+
+    #show help message when h command is called
     @commands.command(name = 'h', help = "help command", aliases = ["help"])
     async def help(self, ctx):
         await self.show_help(ctx)
 
+    #adds song to queue when p command is called
     @commands.command(name="p", help="play song", aliases = ["play"])
     async def play(self, ctx, *args):
         svr_id = ctx.author.guild.id
@@ -250,44 +300,51 @@ class music_cog(commands.Cog):
         #initiate svr details in data structures if not initiated yet 
         if svr_id not in self.music_queue:
             self.reset(svr_id)
-        print(self.is_playing[svr_id])
 
         self.text_channel[svr_id] = ctx
-        
-        if author_vc == None: #if author is not connected to a voice channel
+
+        #if author is not connected to a voice channel, tell user to connect to a voice channel
+        if author_vc == None: 
             await ctx.send("**Connect to a voice channel!")
 
-        elif (author_vc != self.voice_channel[svr_id]) and (self.is_playing[svr_id] == True): #if bot is currently playing in another channel
+        #if bot is currently playing in another channel, tell user that bot is currently playing in another channel
+        elif (author_vc != self.voice_channel[svr_id]) and (self.is_playing[svr_id] == True): 
             await ctx.send("**Currently playing in another channel.**")
 
+        #add music to queue and start playing in all other cases 
         else:
             
             self.voice_channel[svr_id] = author_vc
             query = " ".join(args)
 
-            if "playlist?list" in query: #if query is a youtube playlist link
+            #if query is a youtube playlist link
+            if "playlist?list" in query: 
+
+                #get the id and title of all videos in playlist and add to music_queue
                 playlist_id = get_id(query)
                 songs = get_playlist_details(playlist_id=playlist_id)
-                
                 self.music_queue[svr_id].extend(songs)
                 nb_of_songs = len(songs)
                 await ctx.send("**{}** songs added to queue!".format(nb_of_songs))
-                print(self.vclient[svr_id])
+
+                #connect to voice channel if not connected yet
                 if self.is_playing[svr_id] != True:
-                    #try to connect to voice channel if you are not already connected
+
+                    #try to connect to voice channel if bot not already connected
                     if self.vclient[svr_id] == None:
                         self.vclient[svr_id] = await self.voice_channel[svr_id].connect()
+
+                    #move to voice channel where the author is
                     else:
                         await self.vclient[svr_id].move_to(self.voice_channel[svr_id])
 
-
+                    #start playing music
                     await self.play_music(svr_id)
                     return None
                 
-
-
-            
+            #if query is a video link
             elif "watch?v=" in query:
+
                 id = get_id(query)
                 song = get_video_details_id(id)
                 self.music_queue[svr_id].append(song)
