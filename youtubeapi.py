@@ -96,7 +96,7 @@ def get_video_details_id(id):
 
 #returns youtube video audio source url given a query(str)
 def get_audio_url(url):
-    ydl_options = {'format': 'bestaudio', 'noplaylist':'False'}
+    ydl_options = {'format': 'bestaudio', 'noplaylist':'False', "cookiefile": "cookies.txt"}
     with YoutubeDL(ydl_options) as ydl:
         try: 
             info = ydl.extract_info(url = url, download=False)
