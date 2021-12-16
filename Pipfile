@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 discord = "*"
 "discord.py" = {extras = ["voice"], version = "*"}
-youtube-dl = "*"
 pytube = "*"
 google-api-python-client = "*"
 
