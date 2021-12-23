@@ -21,7 +21,7 @@ class music_cog(commands.Cog):
             },
             {
                 "name" : "Music commands:",
-                "value" : "**{0}p <keywords>** - finds the song on youtube and plays it in your current channel\n**{0}q** - displays the current music queue\n**{0}s** - skips the current song being played\n**{0}d** - disconnects bot from current voice channel\n**{0}sf** - shuffle music queue\n**{0}clr** - clear music queue\n**{0}rm <index>** - remove song in <index> position in queue\n**{0}m <song index> <target index>** - move song from <song index> to <target index> in queue".format(pref)
+                "value" : "**{0}p <keywords>** - finds the song on youtube and plays it in your current channel\n**{0}q** - displays the current music queue\n**{0}s** - skips the current song being played\n**{0}d** - disconnects bot from current voice channel\n**{0}sf** - shuffle music queue\n**{0}clr** - clear music queue\n**{0}rm <index>** - remove song in <index> position in queue\n**{0}m <song index> <target index>** - move song from <song index> to <target index> in queue\n**{0}loop** - Toggles option to loop queue".format(pref)
             }
 
         ]
@@ -35,6 +35,7 @@ class music_cog(commands.Cog):
     is_playing = {} #keep track of whether or not the bot is currently playing in a server
     vclient = {} #keep track of the voice client being used in a server
     queue_msg = {} #keep track of the queue message details when going to next or last page
+    loop_queue = {} #keep track of whether loop queue is enabled or not
     
     
     SONGS_PER_PAGE = 6 #constant to keep track of the number of songs to display per page when queue is shown
@@ -65,7 +66,6 @@ class music_cog(commands.Cog):
         queue_len = len(self.music_queue[svr_id])
         prev_start = self.queue_msg[svr_id]["prev_last"]-self.SONGS_PER_PAGE
         prev_last = self.queue_msg[svr_id]["prev_last"]
-        print(prev_start)
         msg = self.queue_msg[svr_id]["msg"]
 
         #for going to previous page
@@ -155,6 +155,7 @@ class music_cog(commands.Cog):
         self.is_playing[svr_id] = False
         self.vclient[svr_id] = None
         self.music_queue[svr_id] = []
+        self.loop_queue[svr_id] = False
         
         
 
@@ -171,7 +172,8 @@ class music_cog(commands.Cog):
 
     #play next song 
     def play_next(self, svr_id):
-
+        if self.loop_queue[svr_id] == True: 
+            self.music_queue[svr_id].append(self.current_song[svr_id])
         #if there are songs queued in music_queue
         if len(self.music_queue[svr_id]) > 0:
 
@@ -191,6 +193,7 @@ class music_cog(commands.Cog):
                 #remove the first element in music_queue
                 self.current_song[svr_id] = self.music_queue[svr_id][0]
                 self.music_queue[svr_id].pop(0)
+
 
                 #play the audio from url in discord voice client
                 self.vclient[svr_id].play(discord.FFmpegPCMAudio(m_url,**self.FFMPEG_OPTIONS), after=lambda e: self.play_next(svr_id=svr_id))
@@ -234,7 +237,7 @@ class music_cog(commands.Cog):
             if url_req["success"] == True:
                 m_url = url_req["source"]
                     
-                #remove the first element as you are currently playing it
+                #remove the first element as you are currently playing it               
                 self.current_song[svr_id] = self.music_queue[svr_id][0]
                 self.music_queue[svr_id].pop(0)
 
@@ -244,7 +247,7 @@ class music_cog(commands.Cog):
             #if getting the url is not successful
             elif url_req["success"] == False:
                 title = self.music_queue[svr_id][0]["title"]
-                await self.text_channel[svr_id].send('Could not download **{}**, playing next song!'.format(title))
+                await self.text_channel[svr_id].send('Could not download **{}**, playing next song!'.format(title))          
                 self.music_queue[svr_id].pop(0)
                 self.play_next(svr_id)
         else:
@@ -538,4 +541,14 @@ class music_cog(commands.Cog):
         )
         self.reset(svr_id)
 
-
+    @commands.command(name = 'l', help = "Loop queue", aliases = ["loop"])
+    async def loop(self, ctx):
+        svr_id = ctx.author.guild.id
+        if svr_id not in self.music_queue:
+            self.reset(svr_id=svr_id)
+        self.loop_queue[svr_id] = not self.loop_queue[svr_id]
+        if self.loop_queue[svr_id] == True:
+            await ctx.send("**Loop queue enabled!**")
+        else:
+            await ctx.send("**Loop queue disabled!**")
+        
