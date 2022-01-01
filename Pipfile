@@ -8,6 +8,7 @@ discord = "*"
 "discord.py" = {extras = ["voice"], version = "*"}
 pytube = "*"
 google-api-python-client = "*"
+youtube-dl = "*"
 
 [dev-packages]
 
